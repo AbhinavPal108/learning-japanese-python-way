@@ -173,8 +173,8 @@ class PomodoroTimerTests(unittest.TestCase):
             json={
                 "success": True,
                 "service": "pomodoro",
-                "today": {"sessions": 2, "minutes": 50},
-                "all_time": {"sessions": 10, "minutes": 250},
+                "today": {"sessions": 2, "minutes": 50, "seconds": 3030},
+                "all_time": {"sessions": 10, "minutes": 250, "seconds": 15015},
             },
             request=httpx.Request("GET", "https://pomodoro.test/api/integrations/summary"),
         )
@@ -198,9 +198,9 @@ class PomodoroTimerTests(unittest.TestCase):
             summary,
             {
                 "today_sessions": 2,
-                "today_minutes": 50,
+                "today_minutes": 50.5,
                 "all_time_sessions": 10,
-                "all_time_minutes": 250,
+                "all_time_minutes": 250.25,
             },
         )
         self.assertTrue(

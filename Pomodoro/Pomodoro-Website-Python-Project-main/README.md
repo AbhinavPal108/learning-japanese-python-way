@@ -27,7 +27,10 @@ The Japanese app's virtual environment must already be installed.
 ## Japanese Learning App integration
 
 Pomodoro exposes `GET /api/integrations/summary`. It returns today's and
-all-time completed focus-session counts and minutes. Requests require:
+all-time focus-session starts and elapsed focus time. A session is counted as
+soon as its focus timer starts; paused time and breaks are excluded from
+elapsed time. Resetting or changing mode marks the active session cancelled
+without removing its started count. Requests require:
 
 ```http
 Authorization: Bearer <STUDY_INTEGRATION_TOKEN>
@@ -45,9 +48,16 @@ Pomodoro reads `STUDY_INTEGRATION_TOKEN`. The Japanese app reads
 must not be put into browser code or committed. Remote URLs must use HTTPS;
 HTTP is allowed only for loopback development.
 
+Each period returns `sessions`, whole `minutes`, and elapsed `seconds`.
+`minutes` remains whole minutes for compatibility; `seconds` is the accumulated
+elapsed time, including the currently running interval. The Japanese homepage
+uses the seconds value to display live fractional minutes and refreshes about
+every seven seconds while visible.
+
 The summary route returns HTTP 503 when the Pomodoro token is not configured
 and HTTP 401 when the supplied bearer token does not match. The Japanese
-homepage shows real summary values only after a successful, validated response.
+homepage shows statistics only after a successful, validated response and
+shows a loading or unavailable state otherwise.
 
 ### Troubleshoot HTTP 401
 

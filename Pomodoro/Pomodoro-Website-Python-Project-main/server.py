@@ -3,6 +3,7 @@ import json
 import hmac
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -134,6 +135,17 @@ def initialize_db():
                     ON DELETE SET NULL
             );
 
+            CREATE TABLE IF NOT EXISTS focus_sessions (
+                session_id TEXT PRIMARY KEY,
+                started_at REAL NOT NULL,
+                status TEXT NOT NULL CHECK(
+                    status IN ('running', 'paused', 'completed', 'cancelled')
+                ),
+                elapsed_seconds REAL NOT NULL DEFAULT 0,
+                segment_started_at REAL,
+                ended_at REAL
+            );
+
             CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
@@ -144,6 +156,7 @@ def initialize_db():
                 task_name TEXT,
                 subject_name TEXT,
                 created_at TEXT NOT NULL,
+                focus_session_id TEXT,
                 FOREIGN KEY(task_id) REFERENCES tasks(id)
                     ON DELETE SET NULL,
                 FOREIGN KEY(subject_id) REFERENCES subjects(id)
@@ -161,8 +174,21 @@ def initialize_db():
             CREATE INDEX IF NOT EXISTS idx_sessions_subject
                 ON sessions(subject_id);
 
+            CREATE INDEX IF NOT EXISTS idx_focus_sessions_started
+                ON focus_sessions(started_at);
+
             CREATE INDEX IF NOT EXISTS idx_tasks_subject
                 ON tasks(subject_id);
+        """)
+
+        session_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(sessions)")
+        }
+        if "focus_session_id" not in session_columns:
+            db.execute("ALTER TABLE sessions ADD COLUMN focus_session_id TEXT")
+        db.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_focus_session
+            ON sessions(focus_session_id)
         """)
 
         db.execute(
@@ -318,6 +344,70 @@ def get_stats(db):
             "total": task_total,
             "completed": task_completed,
             "remaining": task_total - task_completed,
+        },
+    }
+
+
+def get_integration_summary(db, now=None):
+    """Return focus sessions started and elapsed focus time, including live work."""
+    now = time.time() if now is None else now
+    timer_request(db, DEFAULT_SETTINGS, now=now)
+    today = date.fromtimestamp(now).isoformat()
+
+    today_sessions = 0
+    today_seconds = 0.0
+    all_sessions = 0
+    all_seconds = 0.0
+    timer_state = get_app_value(db, "shared_timer", {})
+
+    focus_sessions = db.execute("""
+        SELECT session_id, started_at, status, elapsed_seconds,
+               segment_started_at
+        FROM focus_sessions
+    """).fetchall()
+    for session in focus_sessions:
+        started_today = date.fromtimestamp(session["started_at"]).isoformat() == today
+        elapsed = session["elapsed_seconds"]
+        if session["status"] == "running" and session["segment_started_at"] is not None:
+            elapsed_until = now
+            if (
+                timer_state.get("focus_session_id") == session["session_id"]
+                and isinstance(timer_state.get("deadline"), (int, float))
+            ):
+                elapsed_until = min(elapsed_until, timer_state["deadline"])
+            elapsed += max(0, elapsed_until - session["segment_started_at"])
+
+        all_sessions += 1
+        all_seconds += elapsed
+        if started_today:
+            today_sessions += 1
+            today_seconds += elapsed
+
+    legacy_sessions = db.execute("""
+        SELECT date, duration
+        FROM sessions
+        WHERE focus_session_id IS NULL
+    """).fetchall()
+    for session in legacy_sessions:
+        elapsed = session["duration"] * 60
+        all_sessions += 1
+        all_seconds += elapsed
+        if session["date"] == today:
+            today_sessions += 1
+            today_seconds += elapsed
+
+    today_elapsed = int(today_seconds)
+    all_elapsed = int(all_seconds)
+    return {
+        "today": {
+            "sessions": today_sessions,
+            "minutes": today_elapsed // 60,
+            "seconds": today_elapsed,
+        },
+        "all_time": {
+            "sessions": all_sessions,
+            "minutes": all_elapsed // 60,
+            "seconds": all_elapsed,
         },
     }
 
@@ -586,18 +676,11 @@ class PomodoroHandler(SimpleHTTPRequestHandler):
                 return
 
             with database() as db:
-                stats = get_stats(db)
+                summary = get_integration_summary(db)
                 self.send_json({
                     "success": True,
                     "service": "pomodoro",
-                    "today": {
-                        "sessions": stats["today"]["sessions"],
-                        "minutes": stats["today"]["minutes"],
-                    },
-                    "all_time": {
-                        "sessions": stats["all_time"]["sessions"],
-                        "minutes": stats["all_time"]["minutes"],
-                    },
+                    **summary,
                 })
             return
 

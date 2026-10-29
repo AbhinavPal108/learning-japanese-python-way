@@ -1,4 +1,6 @@
 """Homepage: entry point and module roadmap."""
+import asyncio
+
 from nicegui import ui
 from learning_japanese.frontend.theme import render_header, render_footer
 from learning_japanese.services.pomodoro_service import get_pomodoro_summary
@@ -6,10 +8,25 @@ from learning_japanese.services.pomodoro_service import get_pomodoro_summary
 
 def render() -> None:
     render_header("home", "", "")
-    pomodoro_state = {"summary": get_pomodoro_summary()}
+    pomodoro_state = {"summary": None, "loading": True, "error": False, "refreshing": False}
 
-    def retry_pomodoro_summary() -> None:
-        pomodoro_state["summary"] = get_pomodoro_summary()
+    async def refresh_pomodoro_summary() -> None:
+        if pomodoro_state["refreshing"]:
+            return
+        is_visible = await ui.run_javascript(
+            "document.visibilityState === 'visible'"
+        )
+        if is_visible is not True:
+            return
+
+        pomodoro_state["refreshing"] = True
+        pomodoro_state["loading"] = pomodoro_state["summary"] is None
+        pomodoro_section.refresh()
+        summary = await asyncio.to_thread(get_pomodoro_summary)
+        pomodoro_state["summary"] = summary
+        pomodoro_state["error"] = summary is None
+        pomodoro_state["loading"] = False
+        pomodoro_state["refreshing"] = False
         pomodoro_section.refresh()
 
     @ui.refreshable
@@ -17,11 +34,24 @@ def render() -> None:
         with ui.card().classes("jp-card w-full p-5"):
             ui.label("Pomodoro Integration").classes("text-lg font-extrabold")
             if pomodoro_state["summary"] is None:
-                ui.label("External API currently unavailable").classes("text-sm text-gray-600")
-                ui.button("Retry", on_click=retry_pomodoro_summary).props(
-                    "outline no-caps"
-                ).classes("mt-2")
+                message = (
+                    "Loading Pomodoro statistics…"
+                    if pomodoro_state["loading"]
+                    else "Pomodoro statistics are currently unavailable. Check the API connection and integration token."
+                )
+                ui.label(message).classes("text-sm text-gray-600")
+                if pomodoro_state["error"]:
+                    ui.button("Retry", on_click=refresh_pomodoro_summary).props(
+                        "outline no-caps"
+                    ).classes("mt-2")
                 return
+
+            if pomodoro_state["refreshing"]:
+                ui.label("Updating statistics…").classes("text-xs text-gray-500")
+            elif pomodoro_state["error"]:
+                ui.label(
+                    "Could not refresh Pomodoro statistics; showing the last successful values."
+                ).classes("text-xs text-amber-700")
 
             with ui.grid(columns=2).classes("w-full gap-3 mt-3"):
                 for name, value in pomodoro_state["summary"].items():
@@ -78,6 +108,7 @@ def render() -> None:
                     if i < 3:
                         ui.label("→").classes("text-xl text-gray-400")
         pomodoro_section()
+        ui.timer(7, refresh_pomodoro_summary, immediate=True)
         with ui.card().classes("jp-card w-full p-5"):
             ui.label("Partner-project ready").classes("text-lg font-extrabold")
             ui.label("REST endpoints share progress and accept events from another project. Open the API documentation when the server is running.").classes("text-sm text-gray-600")

@@ -184,8 +184,8 @@ def tick_pomodoro_timer(now: float | None = None) -> tuple[PomodoroTimer, TimerM
         return timer, finished_mode
 
 
-def get_pomodoro_summary() -> dict[str, int] | None:
-    """Fetch validated focus totals from Pomodoro without exposing its token."""
+def get_pomodoro_summary() -> dict[str, int | float] | None:
+    """Fetch validated focus totals and live elapsed time without exposing its token."""
     if len(STUDY_INTEGRATION_TOKEN) < 32:
         LOGGER.warning("Pomodoro API token is not configured")
         return None
@@ -234,16 +234,33 @@ def get_pomodoro_summary() -> dict[str, int] | None:
         LOGGER.warning("Pomodoro API returned an unexpected response")
         return None
 
-    summary: dict[str, int] = {}
+    summary: dict[str, int | float] = {}
     for period in ("today", "all_time"):
         values = payload.get(period)
         if not isinstance(values, dict):
             LOGGER.warning("Pomodoro API returned invalid %s totals", period)
             return None
-        for metric in ("sessions", "minutes"):
-            value = values.get(metric)
-            if type(value) is not int or value < 0:
-                LOGGER.warning("Pomodoro API returned invalid %s %s", period, metric)
-                return None
-            summary[f"{period}_{metric}"] = value
+        sessions = values.get("sessions")
+        minutes = values.get("minutes")
+        seconds = values.get("seconds")
+        if type(sessions) is not int or sessions < 0:
+            LOGGER.warning("Pomodoro API returned invalid %s sessions", period)
+            return None
+        if type(minutes) is not int or minutes < 0:
+            LOGGER.warning("Pomodoro API returned invalid %s minutes", period)
+            return None
+        if seconds is not None and (type(seconds) is not int or seconds < 0):
+            LOGGER.warning("Pomodoro API returned invalid %s seconds", period)
+            return None
+
+        summary[f"{period}_sessions"] = sessions
+        if seconds is None:
+            summary[f"{period}_minutes"] = minutes
+        else:
+            precise_minutes = round(seconds / 60, 2)
+            summary[f"{period}_minutes"] = (
+                int(precise_minutes)
+                if precise_minutes.is_integer()
+                else precise_minutes
+            )
     return summary
