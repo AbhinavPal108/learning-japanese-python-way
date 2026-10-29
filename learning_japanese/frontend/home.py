@@ -1,10 +1,35 @@
 """Homepage: entry point and module roadmap."""
 from nicegui import ui
 from learning_japanese.frontend.theme import render_header, render_footer
+from learning_japanese.services.pomodoro_service import get_pomodoro_summary
 
 
 def render() -> None:
     render_header("home", "", "")
+    pomodoro_state = {"summary": get_pomodoro_summary()}
+
+    def retry_pomodoro_summary() -> None:
+        pomodoro_state["summary"] = get_pomodoro_summary()
+        pomodoro_section.refresh()
+
+    @ui.refreshable
+    def pomodoro_section() -> None:
+        with ui.card().classes("jp-card w-full p-5"):
+            ui.label("Pomodoro Integration").classes("text-lg font-extrabold")
+            if pomodoro_state["summary"] is None:
+                ui.label("External API currently unavailable").classes("text-sm text-gray-600")
+                ui.button("Retry", on_click=retry_pomodoro_summary).props(
+                    "outline no-caps"
+                ).classes("mt-2")
+                return
+
+            with ui.grid(columns=2).classes("w-full gap-3 mt-3"):
+                for name, value in pomodoro_state["summary"].items():
+                    label = name.replace("_", " ").replace(".", " ").title()
+                    with ui.card().classes("jp-metric"):
+                        ui.label(str(value)).classes("jp-metric-value")
+                        ui.label(label).classes("jp-caption")
+
     with ui.column().classes("w-full max-w-6xl mx-auto px-4 md:px-6 pt-2 pb-8 gap-6"):
         with ui.element("div").classes("jp-hero w-full"):
             ui.label("Learn Japanese the Python Way").classes("text-3xl md:text-4xl font-black leading-tight")
@@ -52,6 +77,7 @@ def render() -> None:
                         ui.label(detail).classes("text-xs text-gray-500")
                     if i < 3:
                         ui.label("→").classes("text-xl text-gray-400")
+        pomodoro_section()
         with ui.card().classes("jp-card w-full p-5"):
             ui.label("Partner-project ready").classes("text-lg font-extrabold")
             ui.label("REST endpoints share progress and accept events from another project. Open the API documentation when the server is running.").classes("text-sm text-gray-600")

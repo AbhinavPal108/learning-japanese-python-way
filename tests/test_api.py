@@ -7,6 +7,9 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
+
+import httpx
 
 _TEST_DIR = tempfile.TemporaryDirectory(prefix="jp-way-test-")
 os.environ["JP_LEARNING_DB"] = os.path.join(_TEST_DIR.name, "test.db")
@@ -17,6 +20,11 @@ from fastapi.testclient import TestClient
 from learning_japanese.backend.api import router
 from learning_japanese.data.database import init_db, get_connection
 from learning_japanese.services.number_service import number_details
+from learning_japanese.services.pomodoro_service import (
+    REQUEST_TIMEOUT_SECONDS,
+    SUMMARY_URL,
+    get_pomodoro_summary,
+)
 
 _test_app = FastAPI()
 _test_app.include_router(router)
@@ -98,6 +106,57 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(exported.json()["source_project"], "learning-japanese-python-way")
         self.assertTrue(any(event["source_project"] == "partner-project"
                             for event in exported.json()["recent_learning_events"]))
+
+
+class PomodoroIntegrationTests(unittest.TestCase):
+    def test_successful_response_returns_focus_statistics(self) -> None:
+        response = httpx.Response(
+            200,
+            json={
+                "focus_sessions": 4,
+                "focus_minutes": 100,
+                "summary": {"completed_sessions": 3},
+            },
+            request=httpx.Request("GET", SUMMARY_URL),
+        )
+        with patch("learning_japanese.services.pomodoro_service.httpx.get", return_value=response) as get:
+            summary = get_pomodoro_summary()
+
+        self.assertEqual(
+            summary,
+            {
+                "focus_sessions": 4,
+                "focus_minutes": 100,
+                "summary.completed_sessions": 3,
+            },
+        )
+        get.assert_called_once_with(SUMMARY_URL, timeout=REQUEST_TIMEOUT_SECONDS)
+
+    def test_failed_requests_and_invalid_json_return_unavailable(self) -> None:
+        error_response = httpx.Response(
+            503,
+            json={"detail": "temporarily unavailable"},
+            request=httpx.Request("GET", SUMMARY_URL),
+        )
+        invalid_json_response = httpx.Response(
+            200,
+            text="not JSON",
+            request=httpx.Request("GET", SUMMARY_URL),
+        )
+        failures = (
+            httpx.ConnectError("connection failed"),
+            error_response,
+            invalid_json_response,
+        )
+
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with patch(
+                    "learning_japanese.services.pomodoro_service.httpx.get",
+                    side_effect=failure if isinstance(failure, Exception) else None,
+                    return_value=failure if isinstance(failure, httpx.Response) else None,
+                ):
+                    self.assertIsNone(get_pomodoro_summary())
 
 
 if __name__ == "__main__":

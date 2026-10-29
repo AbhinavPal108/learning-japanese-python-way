@@ -16,6 +16,7 @@ NiceGUI frontend (Python pages)
   ▼
 Service layer
  Number readings │ Practice scoring │ Quiz generation/scoring │ Progress analytics
+ Pomodoro summary client makes a short-timeout server-side HTTPX request
   │                              ▲
   ▼                              │
 SQLite database                  │ FastAPI REST API (/api/v1)
@@ -51,6 +52,7 @@ CSS is used only to style the NiceGUI pages. No frontend build tool is required.
 3. **Practice (`/practice`)** — random multiple-choice questions, instant feedback, and saved answers.
 4. **Quiz (`/quiz`)** — 10 randomized questions, one point each, unanswered questions score zero, server-side scoring, performance grade, and saved individual answers.
 5. **Progress (`/progress`)** — attempt totals, practice accuracy, quizzes completed, best score, score trend, practice accuracy chart and recent quiz history.
+6. **Pomodoro Integration (homepage section)** — displays numeric focus statistics only after a successful server-side API response; failures show “External API currently unavailable” with a Retry button.
 
 ## Folder structure
 
@@ -64,6 +66,7 @@ learning_japanese_python_review2_updated/
 │   ├── models/schemas.py        # Pydantic request models
 │   ├── services/number_service.py      # Correct readings for 1–100
 │   ├── services/learning_service.py    # Event saving, practice, quiz and stats logic
+│   ├── services/pomodoro_service.py    # Server-side external focus-summary client
 │   └── frontend/
 │       ├── theme.py             # Shared visual theme and navigation
 │       ├── home.py              # Homepage
@@ -71,7 +74,7 @@ learning_japanese_python_review2_updated/
 │       ├── practice.py          # Practice module
 │       ├── quiz.py              # Quiz module
 │       └── progress.py          # Charts and history
-├── tests/test_api.py            # API + persistence + Japanese-number smoke tests
+├── tests/test_api.py            # API, persistence, Pomodoro integration and number smoke tests
 ├── docs/API.md                  # Endpoint catalog and curl examples
 ├── scripts/run_lab.sh           # Linux environment setup and launch helper
 ├── .env.example                 # Configuration template
