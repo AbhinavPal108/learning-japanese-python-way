@@ -25,7 +25,7 @@ def render() -> None:
 
             with ui.grid(columns=2).classes("w-full gap-3 mt-3"):
                 for name, value in pomodoro_state["summary"].items():
-                    label = name.replace("_", " ").replace(".", " ").title()
+                    label = name.replace("_", " ").title()
                     with ui.card().classes("jp-metric"):
                         ui.label(str(value)).classes("jp-metric-value")
                         ui.label(label).classes("jp-caption")

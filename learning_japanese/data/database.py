@@ -88,6 +88,15 @@ def init_db() -> None:
                 UNIQUE(quiz_id, question_id)
             );
 
+            CREATE TABLE IF NOT EXISTS pomodoro_timer (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                mode TEXT NOT NULL CHECK (mode IN ('focus', 'shortBreak', 'longBreak')),
+                focus_round INTEGER NOT NULL CHECK (focus_round BETWEEN 1 AND 4),
+                completed_focus_sessions INTEGER NOT NULL DEFAULT 0,
+                remaining REAL NOT NULL,
+                started_at REAL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_events_learner_time
                 ON learning_events(learner_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_practice_learner_time

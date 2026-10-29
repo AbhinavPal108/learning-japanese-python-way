@@ -21,9 +21,13 @@ from learning_japanese.backend.api import router
 from learning_japanese.data.database import init_db, get_connection
 from learning_japanese.services.number_service import number_details
 from learning_japanese.services.pomodoro_service import (
-    REQUEST_TIMEOUT_SECONDS,
-    SUMMARY_URL,
+    MODE_DURATIONS,
+    PomodoroTimer,
     get_pomodoro_summary,
+    get_pomodoro_timer,
+    reset_pomodoro_timer,
+    start_pomodoro_timer,
+    tick_pomodoro_timer,
 )
 
 _test_app = FastAPI()
@@ -108,55 +112,142 @@ class WorkflowTests(unittest.TestCase):
                             for event in exported.json()["recent_learning_events"]))
 
 
-class PomodoroIntegrationTests(unittest.TestCase):
-    def test_successful_response_returns_focus_statistics(self) -> None:
+class PomodoroTimerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        init_db()
+
+    def test_focus_cycle_uses_long_break_after_four_sessions(self) -> None:
+        timer = PomodoroTimer()
+
+        for expected_session in range(1, 5):
+            timer.start(now=0)
+            self.assertEqual(timer.finish_interval(now=MODE_DURATIONS["focus"]), "focus")
+            self.assertEqual(timer.completed_focus_sessions, expected_session)
+
+            expected_break = "longBreak" if expected_session == 4 else "shortBreak"
+            self.assertEqual(timer.mode, expected_break)
+            self.assertEqual(timer.remaining, MODE_DURATIONS[expected_break])
+
+            timer.start(now=1000)
+            self.assertEqual(
+                timer.finish_interval(now=1000 + MODE_DURATIONS[expected_break]),
+                expected_break,
+            )
+            self.assertEqual(timer.mode, "focus")
+
+    def test_pause_resume_and_invalid_mode(self) -> None:
+        timer = PomodoroTimer()
+        timer.start(now=10)
+        timer.pause(now=20)
+        self.assertEqual(timer.remaining_seconds(now=20), MODE_DURATIONS["focus"] - 10)
+
+        timer.start(now=30)
+        self.assertEqual(timer.remaining_seconds(now=35), MODE_DURATIONS["focus"] - 15)
+        with self.assertRaises(ValueError):
+            timer.select_mode("invalid")
+
+    def test_running_timer_persists_and_expires_after_page_reload(self) -> None:
+        reset_pomodoro_timer(now=100)
+        started = start_pomodoro_timer(now=100)
+
+        restored = get_pomodoro_timer(now=110)
+        self.assertTrue(restored.running)
+        self.assertEqual(restored.started_at, started.started_at)
+        self.assertEqual(
+            restored.remaining_seconds(now=110),
+            MODE_DURATIONS["focus"] - 10,
+        )
+
+        completed, finished_mode = tick_pomodoro_timer(
+            now=100 + MODE_DURATIONS["focus"]
+        )
+        self.assertEqual(finished_mode, "focus")
+        self.assertEqual(completed.completed_focus_sessions, 1)
+        self.assertEqual(completed.mode, "shortBreak")
+        self.assertFalse(completed.running)
+
+    def test_api_summary_returns_today_and_all_time_focus_statistics(self) -> None:
         response = httpx.Response(
             200,
             json={
-                "focus_sessions": 4,
-                "focus_minutes": 100,
-                "summary": {"completed_sessions": 3},
+                "success": True,
+                "service": "pomodoro",
+                "today": {"sessions": 2, "minutes": 50},
+                "all_time": {"sessions": 10, "minutes": 250},
             },
-            request=httpx.Request("GET", SUMMARY_URL),
+            request=httpx.Request("GET", "https://pomodoro.test/api/integrations/summary"),
         )
-        with patch("learning_japanese.services.pomodoro_service.httpx.get", return_value=response) as get:
+        with (
+            patch(
+                "learning_japanese.services.pomodoro_service.POMODORO_URL",
+                "https://pomodoro.test",
+            ),
+            patch(
+                "learning_japanese.services.pomodoro_service.STUDY_INTEGRATION_TOKEN",
+                "t" * 40,
+            ),
+            patch(
+                "learning_japanese.services.pomodoro_service.httpx.get",
+                return_value=response,
+            ) as get,
+        ):
             summary = get_pomodoro_summary()
 
         self.assertEqual(
             summary,
             {
-                "focus_sessions": 4,
-                "focus_minutes": 100,
-                "summary.completed_sessions": 3,
+                "today_sessions": 2,
+                "today_minutes": 50,
+                "all_time_sessions": 10,
+                "all_time_minutes": 250,
             },
         )
-        get.assert_called_once_with(SUMMARY_URL, timeout=REQUEST_TIMEOUT_SECONDS)
+        self.assertTrue(
+            get.call_args.kwargs["headers"]["Authorization"].startswith("Bearer ")
+        )
+        self.assertEqual(get.call_args.kwargs["timeout"], 3.0)
 
-    def test_failed_requests_and_invalid_json_return_unavailable(self) -> None:
-        error_response = httpx.Response(
-            503,
-            json={"detail": "temporarily unavailable"},
-            request=httpx.Request("GET", SUMMARY_URL),
-        )
-        invalid_json_response = httpx.Response(
-            200,
-            text="not JSON",
-            request=httpx.Request("GET", SUMMARY_URL),
-        )
+    def test_api_failures_return_unavailable(self) -> None:
+        request = httpx.Request("GET", "https://pomodoro.test/api/integrations/summary")
         failures = (
-            httpx.ConnectError("connection failed"),
-            error_response,
-            invalid_json_response,
+            httpx.ConnectError("connection failed", request=request),
+            httpx.Response(503, request=request),
+            httpx.Response(200, text="invalid JSON", request=request),
         )
-
         for failure in failures:
             with self.subTest(failure=type(failure).__name__):
-                with patch(
-                    "learning_japanese.services.pomodoro_service.httpx.get",
-                    side_effect=failure if isinstance(failure, Exception) else None,
-                    return_value=failure if isinstance(failure, httpx.Response) else None,
+                with (
+                    patch(
+                        "learning_japanese.services.pomodoro_service.POMODORO_URL",
+                        "https://pomodoro.test",
+                    ),
+                    patch(
+                        "learning_japanese.services.pomodoro_service.STUDY_INTEGRATION_TOKEN",
+                        "t" * 40,
+                    ),
+                    patch(
+                        "learning_japanese.services.pomodoro_service.httpx.get",
+                        side_effect=failure if isinstance(failure, Exception) else None,
+                        return_value=failure if isinstance(failure, httpx.Response) else None,
+                    ),
                 ):
                     self.assertIsNone(get_pomodoro_summary())
+
+    def test_api_rejects_non_https_remote_url_before_request(self) -> None:
+        with (
+            patch(
+                "learning_japanese.services.pomodoro_service.POMODORO_URL",
+                "http://pomodoro.example",
+            ),
+            patch(
+                "learning_japanese.services.pomodoro_service.STUDY_INTEGRATION_TOKEN",
+                "t" * 40,
+            ),
+            patch("learning_japanese.services.pomodoro_service.httpx.get") as get,
+        ):
+            self.assertIsNone(get_pomodoro_summary())
+        get.assert_not_called()
 
 
 if __name__ == "__main__":

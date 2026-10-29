@@ -342,6 +342,7 @@ def render_header(
                 ("🎯 Practice", "/practice", "practice"),
                 ("📝 Quiz", "/quiz", "quiz"),
                 ("📊 Progress", "/progress", "progress"),
+                ("⏱ Pomodoro", "/pomodoro", "pomodoro"),
             ]
 
             for label, path, key in links:

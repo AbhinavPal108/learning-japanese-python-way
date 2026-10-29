@@ -16,7 +16,7 @@ NiceGUI frontend (Python pages)
   ▼
 Service layer
  Number readings │ Practice scoring │ Quiz generation/scoring │ Progress analytics
- Pomodoro summary client makes a short-timeout server-side HTTPX request
+ Pomodoro summary fetched server-side from its authenticated API
   │                              ▲
   ▼                              │
 SQLite database                  │ FastAPI REST API (/api/v1)
@@ -52,7 +52,7 @@ CSS is used only to style the NiceGUI pages. No frontend build tool is required.
 3. **Practice (`/practice`)** — random multiple-choice questions, instant feedback, and saved answers.
 4. **Quiz (`/quiz`)** — 10 randomized questions, one point each, unanswered questions score zero, server-side scoring, performance grade, and saved individual answers.
 5. **Progress (`/progress`)** — attempt totals, practice accuracy, quizzes completed, best score, score trend, practice accuracy chart and recent quiz history.
-6. **Pomodoro Integration (homepage section)** — displays numeric focus statistics only after a successful server-side API response; failures show “External API currently unavailable” with a Retry button.
+6. **Pomodoro (`/pomodoro`)** — standalone focus timer with 25-minute focus sessions, 5-minute short breaks, and a 15-minute long break after four focus sessions. Timer state is stored in the Japanese app's SQLite database, so it continues across pages and is restored when the Pomodoro page is reopened. The homepage retrieves today/all-time focus totals from Pomodoro's protected summary API; the integration token stays on the backend.
 
 ## Folder structure
 
@@ -66,14 +66,15 @@ learning_japanese_python_review2_updated/
 │   ├── models/schemas.py        # Pydantic request models
 │   ├── services/number_service.py      # Correct readings for 1–100
 │   ├── services/learning_service.py    # Event saving, practice, quiz and stats logic
-│   ├── services/pomodoro_service.py    # Server-side external focus-summary client
+│   ├── services/pomodoro_service.py    # Pomodoro timer and authenticated summary client
 │   └── frontend/
 │       ├── theme.py             # Shared visual theme and navigation
 │       ├── home.py              # Homepage
 │       ├── learn.py             # Learn module
 │       ├── practice.py          # Practice module
 │       ├── quiz.py              # Quiz module
-│       └── progress.py          # Charts and history
+│       ├── progress.py          # Charts and history
+│       └── pomodoro.py          # Standalone Pomodoro timer page
 ├── tests/test_api.py            # API, persistence, Pomodoro integration and number smoke tests
 ├── docs/API.md                  # Endpoint catalog and curl examples
 ├── scripts/run_lab.sh           # Linux environment setup and launch helper
@@ -122,6 +123,13 @@ learning_japanese_python_review2_updated/
    ```
 
    Set a strong `PARTNER_API_KEY` before the companion project uses the partner endpoints. Use the **same secret** in both projects. The `./scripts/run_lab.sh` helper generates a key in `.env` on first setup if it is blank; copy that same value into the partner project securely. Do not commit `.env` or send the secret in a review report.
+
+   To show Pomodoro totals on the Japanese-learning homepage, set
+   `POMODORO_URL` to the Pomodoro server's base URL and
+   `STUDY_INTEGRATION_TOKEN` to the same value configured on both services.
+   The token is used only by the backend and is never
+   sent to the browser. If the token is missing or the API is unavailable,
+   the homepage shows an unavailable message and Retry button.
 
 5. Launch the app:
 
@@ -178,6 +186,11 @@ source .venv/bin/activate
 python -m compileall -q learning_japanese tests
 python -m unittest discover -s tests -v
 ```
+
+The root `pytest` configuration intentionally collects only this app's `tests/`
+directory. Pomodoro and Aura Cards are separate projects with their own
+dependencies and tests; run those suites from their respective project
+directories and virtual environments.
 
 The test suite checks the 1–100 number list, troublesome transition points (10, 11, 20, 42, 99, 100), saved practice, scoring and persistence of every quiz answer, duplicate-submission handling, and partner event import/export. The tests create a temporary database and do not overwrite the classroom demo database.
 

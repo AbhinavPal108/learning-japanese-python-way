@@ -24,6 +24,11 @@ if not DB_PATH.is_absolute():
 
 # API security
 PARTNER_API_KEY = os.getenv("PARTNER_API_KEY", "").strip()
+POMODORO_URL = os.getenv(
+    "POMODORO_URL",
+    "https://pomodoro-website-python-project.onrender.com",
+).strip().rstrip("/")
+STUDY_INTEGRATION_TOKEN = os.getenv("STUDY_INTEGRATION_TOKEN", "").strip()
 
 # CORS configuration: comma-separated origins
 _raw_origins = os.getenv(

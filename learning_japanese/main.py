@@ -20,6 +20,7 @@ from learning_japanese.frontend import (
     practice,
     quiz,
     progress,
+    pomodoro,
 )
 
 # Initialize the database.
@@ -79,6 +80,11 @@ def quiz_page() -> None:
 @ui.page("/progress")
 def progress_page() -> None:
     progress.render()
+
+
+@ui.page("/pomodoro")
+def pomodoro_page() -> None:
+    pomodoro.render()
 
 
 if __name__ in {"__main__", "__mp_main__"}:
