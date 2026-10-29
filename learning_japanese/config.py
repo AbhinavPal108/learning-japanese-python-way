@@ -26,7 +26,7 @@ if not DB_PATH.is_absolute():
 PARTNER_API_KEY = os.getenv("PARTNER_API_KEY", "").strip()
 POMODORO_URL = os.getenv(
     "POMODORO_URL",
-    "https://pomodoro-website-python-project.onrender.com",
+    "https://pomodoro-website-python-project-4dm0.onrender.com",
 ).strip().rstrip("/")
 STUDY_INTEGRATION_TOKEN = os.getenv("STUDY_INTEGRATION_TOKEN", "").strip()
 

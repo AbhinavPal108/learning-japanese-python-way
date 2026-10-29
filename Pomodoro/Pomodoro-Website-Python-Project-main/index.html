@@ -1,0 +1,328 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ba4949">
+    <title>Pomodoro | Study Space v2.2.0</title>
+    <link rel="stylesheet" href="style.css?v=2.2.1">
+</head>
+<body data-mode="focus">
+    <main class="app">
+        <header class="header">
+            <div class="version">STUDY SPACE · V2.2.0</div>
+            <h1>Pomodoro</h1>
+            <p>Focus. Study. Repeat.</p>
+        </header>
+
+        <section class="timer-card">
+            <div class="modes" aria-label="Timer mode">
+                <button class="mode active" data-mode="focus">Focus</button>
+                <button class="mode" data-mode="shortBreak">Short Break</button>
+                <button class="mode" data-mode="longBreak">Long Break</button>
+            </div>
+
+            <div id="timer" aria-live="off">25:00</div>
+            <div id="status">Time to focus.</div>
+
+            <div class="current-task">
+                <label for="sessionTask">STUDYING</label>
+                <select id="sessionTask">
+                    <option value="">No task selected</option>
+                </select>
+            </div>
+
+            <button id="startButton" class="primary-button">START</button>
+            <div class="round">Focus round <span id="round">1</span> of 4</div>
+            <button id="resetButton" class="reset-button">Reset timer</button>
+        </section>
+
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        <div id="connectionStatus" class="connection-status">Connecting to local database…</div>
+    </main>
+
+    <aside class="toolbar" aria-label="Study tools">
+        <button class="tool-button" data-panel="notesPanel" title="Notes" aria-label="Notes">N</button>
+        <button class="tool-button" data-panel="tasksPanel" title="Subjects and tasks" aria-label="Subjects and tasks">T</button>
+        <button class="tool-button" data-panel="statsPanel" title="Statistics" aria-label="Statistics">S</button>
+        <button class="tool-button" data-panel="settingsPanel" title="Settings" aria-label="Settings">⚙</button>
+        <button class="tool-button ai-tool-button" data-panel="chatPanel" title="AI Study Sidekick" aria-label="AI Study Sidekick">AI</button>
+    </aside>
+
+    <div id="panelBackdrop" class="panel-backdrop"></div>
+
+    <!-- Notes -->
+    <section class="side-panel" id="notesPanel" aria-labelledby="notesHeading">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">YOUR SCRATCHPAD</span>
+                <h2 id="notesHeading">Notes</h2>
+            </div>
+            <button class="close-panel" aria-label="Close notes">×</button>
+        </div>
+
+        <p class="muted">Ideas, reminders, or things to revisit after this session.</p>
+        <textarea id="notes" placeholder="Start writing…"></textarea>
+        <button id="saveNotes" class="panel-primary">Save notes</button>
+        <p id="notesSaved" class="feedback"></p>
+    </section>
+
+    <!-- Subjects and tasks -->
+    <section class="side-panel" id="tasksPanel" aria-labelledby="tasksHeading">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">PLAN YOUR WORK</span>
+                <h2 id="tasksHeading">Subjects &amp; tasks</h2>
+            </div>
+            <button class="close-panel" aria-label="Close subjects and tasks">×</button>
+        </div>
+
+        <div class="section-block">
+            <h3>Subjects</h3>
+            <form id="subjectForm" class="inline-form">
+                <input id="subjectInput" type="text" maxlength="60"
+                       placeholder="e.g. Computer Networks" required>
+                <button type="submit" aria-label="Add subject">+</button>
+            </form>
+            <div id="subjectList" class="subject-list"></div>
+        </div>
+
+        <div class="section-block">
+            <h3>New task</h3>
+            <form id="taskForm" class="form-stack">
+                <input id="taskInput" type="text" maxlength="200"
+                       placeholder="What needs doing?" required>
+                <label for="taskSubject">Subject</label>
+                <select id="taskSubject">
+                    <option value="">Unassigned</option>
+                </select>
+                <label for="taskDueDate">Deadline <span class="muted">(optional)</span></label>
+                <input id="taskDueDate" type="date">
+                <button type="submit" class="panel-primary">Add task</button>
+            </form>
+        </div>
+
+        <div class="section-block">
+            <div class="section-heading">
+                <h3>Your tasks</h3>
+                <span id="taskProgress" class="small-pill">0 / 0 done</span>
+            </div>
+            <div class="filter-row">
+                <select id="taskFilter" aria-label="Filter tasks">
+                    <option value="all">All tasks</option>
+                    <option value="active">To do</option>
+                    <option value="completed">Completed</option>
+                </select>
+                <select id="subjectFilter" aria-label="Filter by subject">
+                    <option value="all">All subjects</option>
+                </select>
+            </div>
+            <div id="taskList" class="task-list"></div>
+        </div>
+    </section>
+
+    <!-- Analytics -->
+    <section class="side-panel stats-panel" id="statsPanel" aria-labelledby="statsHeading">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">YOUR PROGRESS</span>
+                <h2 id="statsHeading">Study analytics</h2>
+            </div>
+            <button class="close-panel" aria-label="Close analytics">×</button>
+        </div>
+
+        <div class="stats-section">
+            <h3>Today</h3>
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <span id="todayTime">0m</span>
+                    <small>Focus time</small>
+                </div>
+                <div class="stat-box">
+                    <span id="todaySessions">0</span>
+                    <small>Pomodoros</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <h3>This week</h3>
+            <div id="weeklyChart" class="weekly-chart"></div>
+            <div class="week-total">
+                <span id="weekTime">0m</span>
+                <small>Total focus time · last 7 days</small>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <h3>Study streak</h3>
+            <div class="streak-card">
+                <span id="streakCount">0</span>
+                <div>
+                    <strong id="streakLabel">Consecutive study days</strong>
+                    <small>At least one completed focus session per day</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <h3>Subjects</h3>
+            <div id="subjectAnalytics" class="subject-analytics"></div>
+        </div>
+
+        <div class="stats-section">
+            <h3>Task progress</h3>
+            <div class="progress-track"><div id="taskProgressBar"></div></div>
+            <p id="taskProgressText" class="muted">No tasks yet.</p>
+        </div>
+
+        <div class="stats-section">
+            <h3>All time</h3>
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <span id="allTime">0m</span>
+                    <small>Focus time</small>
+                </div>
+                <div class="stat-box">
+                    <span id="allSessions">0</span>
+                    <small>Pomodoros</small>
+                </div>
+            </div>
+        </div>
+        <button id="refreshStats" class="secondary-button">Refresh statistics</button>
+    </section>
+
+    <!-- Settings -->
+    <section class="side-panel" id="settingsPanel" aria-labelledby="settingsHeading">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">MAKE IT YOURS</span>
+                <h2 id="settingsHeading">Settings</h2>
+            </div>
+            <button class="close-panel" aria-label="Close settings">×</button>
+        </div>
+
+        <form id="settingsForm" class="form-stack">
+            <div class="setting">
+                <label for="focusLength">Focus duration</label>
+                <select id="focusLength">
+                    <option value="25">25 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="50">50 minutes</option>
+                </select>
+            </div>
+
+            <div class="setting">
+                <label for="breakLength">Short break</label>
+                <select id="breakLength">
+                    <option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                </select>
+            </div>
+
+            <div class="setting">
+                <label for="longBreakLength">Long break</label>
+                <select id="longBreakLength">
+                    <option value="15">15 minutes</option>
+                    <option value="20">20 minutes</option>
+                    <option value="30">30 minutes</option>
+                </select>
+            </div>
+
+            <div class="setting-toggle">
+                <div>
+                    <strong>Auto-start breaks</strong>
+                    <small>Start the next break automatically.</small>
+                </div>
+                <input type="checkbox" id="autoStartBreaks">
+            </div>
+
+            <div class="setting-toggle">
+                <div>
+                    <strong>Auto-start focus</strong>
+                    <small>Start focusing after a break.</small>
+                </div>
+                <input type="checkbox" id="autoStartFocus">
+            </div>
+
+            <button type="submit" class="panel-primary">Save settings</button>
+            <p id="settingsSaved" class="feedback"></p>
+        </form>
+    </section>
+
+    <!-- AI Sidekick -->
+    <section class="side-panel chat-panel" id="chatPanel" aria-labelledby="chatHeading">
+        <div class="panel-header">
+            <div>
+                <span class="eyebrow">YOUR STUDY COMPANION</span>
+                <h2 id="chatHeading">AI Sidekick</h2>
+            </div>
+            <button class="close-panel" aria-label="Close AI Sidekick">×</button>
+        </div>
+
+        <div class="ai-intro">
+            <div class="ai-avatar">AI</div>
+            <div>
+                <strong>Study Sidekick</strong>
+                <p>Powered by Gemini</p>
+            </div>
+            <span class="ai-status-dot" title="Assistant panel ready"></span>
+        </div>
+
+        <p class="muted chat-description">
+            Ask questions, simplify difficult concepts, practise problems,
+            or plan your next study session.
+        </p>
+
+        <div id="chatMessages" class="chat-messages" role="log"
+             aria-live="polite" aria-relevant="additions">
+            <div class="chat-message assistant-message">
+                <span class="message-label">SIDEKICK</span>
+                <p>Hey! What are we studying today? I can explain concepts,
+                quiz you, or help break a big task into smaller steps.</p>
+            </div>
+        </div>
+
+        <div class="chat-suggestions" id="chatSuggestions">
+            <button type="button" class="suggestion-button"
+                    data-prompt="Explain a difficult concept to me in simple terms.">
+                Explain a concept
+            </button>
+            <button type="button" class="suggestion-button"
+                    data-prompt="Quiz me on what I'm studying. Ask one question at a time.">
+                Quiz me
+            </button>
+            <button type="button" class="suggestion-button"
+                    data-prompt="Help me break my current study workload into manageable steps.">
+                Plan my study
+            </button>
+        </div>
+
+        <div id="chatStatus" class="chat-status" role="status" aria-live="polite"></div>
+
+        <form id="chatForm" class="chat-form">
+            <textarea id="chatInput" rows="2" maxlength="4000"
+                      placeholder="Message your Sidekick…"
+                      aria-label="Message the AI Sidekick" required></textarea>
+            <button id="chatSend" type="submit" class="chat-send-button"
+                    aria-label="Send message" title="Send message">
+                <span>Send</span>
+                <span aria-hidden="true">↑</span>
+            </button>
+        </form>
+
+        <div class="chat-footer">
+            <span>Enter to send · Shift + Enter for a new line</span>
+            <button id="clearChat" type="button">Clear chat</button>
+        </div>
+
+        <p class="chat-disclaimer">AI can make mistakes. Verify important information.</p>
+    </section>
+
+    <script src="script.js?v=2.2.1"></script>
+    <script src="timer-sync.js?v=1"></script>
+</body>
+</html>

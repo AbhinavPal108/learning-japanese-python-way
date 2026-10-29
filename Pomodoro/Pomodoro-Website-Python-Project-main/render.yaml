@@ -1,0 +1,24 @@
+envVarGroups:
+  - name: pomodoro-japanese-integration
+    envVars:
+      - key: STUDY_INTEGRATION_TOKEN
+        generateValue: true
+
+services:
+  - type: web
+    name: pomodoro-website
+    runtime: python
+    plan: starter
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: POMODORO_DB
+        value: /var/data/pomodoro.db
+      - fromGroup: pomodoro-japanese-integration
+    disk:
+      name: pomodoro-data
+      mountPath: /var/data
+      sizeGB: 1
